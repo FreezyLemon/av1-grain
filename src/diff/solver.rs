@@ -14,7 +14,7 @@ use crate::{
 };
 
 const LOW_POLY_NUM_PARAMS: usize = 3;
-const NOISE_MODEL_LAG: usize = 3;
+const NOISE_MODEL_LAG: u32 = 3;
 const BLOCK_NORMALIZATION: f64 = 255.0f64;
 
 #[derive(Debug, Clone, Copy)]
@@ -37,9 +37,10 @@ impl FlatBlockFinder {
                 let xd = (x as f64 - bs_half) / bs_half;
                 let coords = [yd, xd, 1.0f64];
                 let row = y * BLOCK_SIZE + x;
-                a[LOW_POLY_NUM_PARAMS * row] = yd;
-                a[LOW_POLY_NUM_PARAMS * row + 1] = xd;
-                a[LOW_POLY_NUM_PARAMS * row + 2] = 1.0f64;
+                let row_offset = LOW_POLY_NUM_PARAMS * row as usize;
+                a[row_offset + 0] = yd;
+                a[row_offset + 1] = xd;
+                a[row_offset + 2] = 1.0f64;
 
                 (0..LOW_POLY_NUM_PARAMS).for_each(|i| {
                     (0..LOW_POLY_NUM_PARAMS).for_each(|j| {
@@ -88,7 +89,7 @@ impl FlatBlockFinder {
 
         let num_blocks_w = (plane.cfg.width + BLOCK_SIZE - 1) / BLOCK_SIZE;
         let num_blocks_h = (plane.cfg.height + BLOCK_SIZE - 1) / BLOCK_SIZE;
-        let num_blocks = num_blocks_w * num_blocks_h;
+        let num_blocks = num_blocks_w as usize * num_blocks_h as usize;
         let mut flat_blocks = vec![0u8; num_blocks];
         let mut num_flat = 0;
         let mut plane_result = [0.0f64; BLOCK_SIZE_SQUARED];
@@ -115,11 +116,11 @@ impl FlatBlockFinder {
                     for xi in 1..(BLOCK_SIZE - 1) {
                         // SAFETY: We know the size of `block_result` and that we cannot exceed the bounds of it
                         unsafe {
-                            let result_ptr = block_result.as_ptr().add(yi * BLOCK_SIZE + xi);
+                            let result_ptr = block_result.as_ptr().add((yi * BLOCK_SIZE + xi) as usize);
 
                             let gx = (*result_ptr.add(1) - *result_ptr.sub(1)) / 2f64;
                             let gy =
-                                (*result_ptr.add(BLOCK_SIZE) - *result_ptr.sub(BLOCK_SIZE)) / 2f64;
+                                (*result_ptr.add(BLOCK_SIZE as usize) - *result_ptr.sub(BLOCK_SIZE as usize)) / 2f64;
                             gxx += gx * gx;
                             gxy += gx * gy;
                             gyy += gy * gy;
@@ -165,10 +166,10 @@ impl FlatBlockFinder {
                 // SAFETY: We know the size of `flat_blocks` and `scores` and that we cannot exceed the bounds of it
                 unsafe {
                     let index = by * num_blocks_w + bx;
-                    *flat_blocks.get_unchecked_mut(index) = if is_flat { 255 } else { 0 };
-                    *scores.get_unchecked_mut(index) = IndexAndScore {
+                    *flat_blocks.get_unchecked_mut(index as usize) = if is_flat { 255 } else { 0 };
+                    *scores.get_unchecked_mut(index as usize) = IndexAndScore {
                         score: if var > VAR_THRESHOLD { score } else { 0f32 },
-                        index,
+                        index: index as usize,
                     };
                 }
                 if is_flat {
@@ -199,8 +200,8 @@ impl FlatBlockFinder {
     fn extract_block(
         &self,
         plane: &Plane<u8>,
-        offset_x: usize,
-        offset_y: usize,
+        offset_x: u32,
+        offset_y: u32,
         plane_result: &mut [f64; BLOCK_SIZE_SQUARED],
         block_result: &mut [f64; BLOCK_SIZE_SQUARED],
     ) {
@@ -215,8 +216,8 @@ impl FlatBlockFinder {
                 // SAFETY: We know the bounds of the plane data and `block_result`
                 // and do not exceed them.
                 unsafe {
-                    *block_result.get_unchecked_mut(yi * BLOCK_SIZE + xi) =
-                        f64::from(*plane_origin.get_unchecked(y * plane.cfg.stride + x))
+                    *block_result.get_unchecked_mut((yi * BLOCK_SIZE + xi) as usize) =
+                        f64::from(*plane_origin.get_unchecked((y * plane.cfg.stride + x) as usize))
                             / BLOCK_NORMALIZATION;
                 }
             }
@@ -671,7 +672,7 @@ impl NoiseModel {
 
     #[must_use]
     const fn num_coeffs() -> usize {
-        let n = 2 * NOISE_MODEL_LAG + 1;
+        let n = (2 * NOISE_MODEL_LAG + 1) as usize;
         (n * n) / 2
     }
 
@@ -750,10 +751,10 @@ impl NoiseModel {
         denoised: &Plane<u8>,
         alt_source: Option<&Plane<u8>>,
         alt_denoised: Option<&Plane<u8>>,
-        frame_dims: (usize, usize),
+        frame_dims: (u32, u32),
         flat_blocks: &[u8],
-        num_blocks_w: usize,
-        num_blocks_h: usize,
+        num_blocks_w: u32,
+        num_blocks_h: u32,
     ) {
         let num_coords = self.n;
         let state = &mut self.latest_state[channel];
@@ -777,12 +778,12 @@ impl NoiseModel {
             for bx in 0..num_blocks_w {
                 // SAFETY: We know the indexes we provide do not overflow the data bounds
                 unsafe {
-                    let flat_block_ptr = flat_blocks.as_ptr().add(by * num_blocks_w + bx);
+                    let flat_block_ptr = flat_blocks.as_ptr().add((by * num_blocks_w + bx) as usize);
                     let x_o = bx * block_w;
                     if *flat_block_ptr == 0 {
                         continue;
                     }
-                    let y_start = if by > 0 && *flat_block_ptr.sub(num_blocks_w) > 0 {
+                    let y_start = if by > 0 && *flat_block_ptr.sub(num_blocks_w as usize) > 0 {
                         0
                     } else {
                         NOISE_MODEL_LAG
@@ -840,10 +841,10 @@ impl NoiseModel {
         source: &Plane<u8>,
         denoised: &Plane<u8>,
         alt_source: Option<&Plane<u8>>,
-        frame_dims: (usize, usize),
+        frame_dims: (u32, u32),
         flat_blocks: &[u8],
-        num_blocks_w: usize,
-        num_blocks_h: usize,
+        num_blocks_w: u32,
+        num_blocks_h: u32,
     ) {
         let coeffs = &self.latest_state[channel].eqns.x;
         let num_coords = self.n;
@@ -856,7 +857,7 @@ impl NoiseModel {
             let y_o = by * block_h;
             for bx in 0..num_blocks_w {
                 let x_o = bx * block_w;
-                if flat_blocks[by * num_blocks_w + bx] == 0 {
+                if flat_blocks[(by * num_blocks_w + bx) as usize] == 0 {
                     continue;
                 }
                 let num_samples_h = ((frame_dims.1 >> source.cfg.ydec) - by * block_h).min(block_h);
@@ -930,7 +931,7 @@ impl NoiseModelState {
         Self {
             eqns: EquationSystem::new(n),
             ar_gain: 1.0f64,
-            num_observations: 0usize,
+            num_observations: 0,
             strength_solver: StrengthSolver::new(NUM_BINS),
         }
     }

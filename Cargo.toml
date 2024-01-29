@@ -35,3 +35,6 @@ serialize = ["serde", "arrayvec/serde"]
 [profile.release]
 codegen-units = 1
 lto = "thin"
+
+[patch.crates-io]
+v_frame = { git = "https://github.com/FreezyLemon/v_frame", branch = "slim-plane-structs" }

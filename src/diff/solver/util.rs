@@ -123,13 +123,13 @@ pub(super) fn extract_ar_row(
     num_coords: usize,
     source_origin: &[u8],
     denoised_origin: &[u8],
-    stride: usize,
-    dec: (usize, usize),
+    stride: u32,
+    dec: (u8, u8),
     alt_source_origin: Option<&[u8]>,
     alt_denoised_origin: Option<&[u8]>,
-    alt_stride: usize,
-    x: usize,
-    y: usize,
+    alt_stride: u32,
+    x: u32,
+    y: u32,
     buffer: &mut [f64],
 ) -> f64 {
     debug_assert!(buffer.len() > num_coords);
@@ -142,12 +142,12 @@ pub(super) fn extract_ar_row(
             let y_i = y as isize + coords.get_unchecked(i)[1];
             debug_assert!(x_i >= 0);
             debug_assert!(y_i >= 0);
-            let index = y_i as usize * stride + x_i as usize;
+            let index = y_i as usize * stride as usize + x_i as usize;
             *buffer.get_unchecked_mut(i) = f64::from(*source_origin.get_unchecked(index))
                 - f64::from(*denoised_origin.get_unchecked(index));
         }
-        let val = f64::from(*source_origin.get_unchecked(y * stride + x))
-            - f64::from(*denoised_origin.get_unchecked(y * stride + x));
+        let val = f64::from(*source_origin.get_unchecked((y * stride + x) as usize))
+            - f64::from(*denoised_origin.get_unchecked((y * stride + x) as usize));
 
         if let Some(alt_source_origin) = alt_source_origin {
             if let Some(alt_denoised_origin) = alt_denoised_origin {
@@ -159,7 +159,7 @@ pub(super) fn extract_ar_row(
                     let y_up = (y << dec.1) + dy_i;
                     for dx_i in 0..(1 << dec.0) {
                         let x_up = (x << dec.0) + dx_i;
-                        let index = y_up * alt_stride + x_up;
+                        let index = (y_up * alt_stride + x_up) as usize;
                         source_sum += u64::from(*alt_source_origin.get_unchecked(index));
                         denoised_sum += u64::from(*alt_denoised_origin.get_unchecked(index));
                         num_samples += 1;
@@ -177,9 +177,9 @@ pub(super) fn extract_ar_row(
 #[must_use]
 pub(super) fn get_block_mean(
     source: &Plane<u8>,
-    frame_dims: (usize, usize),
-    x_o: usize,
-    y_o: usize,
+    frame_dims: (u32, u32),
+    x_o: u32,
+    y_o: u32,
 ) -> f64 {
     let max_h = (frame_dims.1 - y_o).min(BLOCK_SIZE);
     let max_w = (frame_dims.0 - x_o).min(BLOCK_SIZE);
@@ -191,7 +191,7 @@ pub(super) fn get_block_mean(
             let index = (y_o + y) * source.cfg.stride + x_o + x;
             // SAFETY: We know the index cannot exceed the dimensions of the plane data
             unsafe {
-                block_sum += u64::from(*data_origin.get_unchecked(index));
+                block_sum += u64::from(*data_origin.get_unchecked(index as usize));
             }
         }
     }
@@ -203,11 +203,11 @@ pub(super) fn get_block_mean(
 pub(super) fn get_noise_var(
     source: &Plane<u8>,
     denoised: &Plane<u8>,
-    frame_dims: (usize, usize),
-    x_o: usize,
-    y_o: usize,
-    block_w: usize,
-    block_h: usize,
+    frame_dims: (u32, u32),
+    x_o: u32,
+    y_o: u32,
+    block_w: u32,
+    block_h: u32,
 ) -> f64 {
     let max_h = (frame_dims.1 - y_o).min(block_h);
     let max_w = (frame_dims.0 - x_o).min(block_w);
@@ -221,8 +221,8 @@ pub(super) fn get_noise_var(
             let index = (y_o + y) * source.cfg.stride + x_o + x;
             // SAFETY: We know the index cannot exceed the dimensions of the plane data
             unsafe {
-                let noise = i64::from(*source_origin.get_unchecked(index))
-                    - i64::from(*denoised_origin.get_unchecked(index));
+                let noise = i64::from(*source_origin.get_unchecked(index as usize))
+                    - i64::from(*denoised_origin.get_unchecked(index as usize));
                 noise_sum += noise;
                 noise_var_sum += noise.pow(2) as u64;
             }

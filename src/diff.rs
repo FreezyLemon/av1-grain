@@ -7,8 +7,8 @@ use crate::{util::frame_into_u8, GrainTableSegment};
 
 mod solver;
 
-const BLOCK_SIZE: usize = 32;
-const BLOCK_SIZE_SQUARED: usize = BLOCK_SIZE * BLOCK_SIZE;
+const BLOCK_SIZE: u32 = 32;
+const BLOCK_SIZE_SQUARED: usize = BLOCK_SIZE as usize * BLOCK_SIZE as usize;
 
 pub struct DiffGenerator {
     fps: Rational64,
