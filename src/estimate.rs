@@ -25,9 +25,10 @@ pub fn estimate_plane_noise<T: Pixel>(plane: &Plane<T>, bit_depth: usize) -> Opt
         unimplemented!("Bit depths greater than 16 are not currently supported");
     }
 
-    let width = plane.width().get();
-    let height = plane.height().get();
-    let stride = plane.geometry().stride.get();
+    let width = plane.width();
+    let height = plane.height();
+    let stride = plane.geometry().stride();
+    let origin = plane.geometry().data_origin();
 
     let mut accum = 0u64;
     let mut count = 0u64;
@@ -40,13 +41,9 @@ pub fn estimate_plane_noise<T: Pixel>(plane: &Plane<T>, bit_depth: usize) -> Opt
                 for jj in -1isize..=1isize {
                     let idx = (center_idx + ii * stride as isize + jj) as usize;
                     mat[(ii + 1) as usize][(jj + 1) as usize] = if size_of::<T>() == 1 {
-                        plane.data()[plane.data_origin() + idx]
-                            .to_i16()
-                            .expect("fits into i16")
+                        plane.data()[origin + idx].into().cast_signed()
                     } else {
-                        let pix = plane.data()[plane.data_origin() + idx]
-                            .to_u16()
-                            .expect("fits into u16");
+                        let pix = plane.data()[origin + idx].into();
                         (pix >> (bit_depth - 8)).cast_signed()
                     };
                 }
